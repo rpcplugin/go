@@ -1,4 +1,4 @@
-module github.com/rpcplugin/go
+module go.rpcplugin.org/rpcplugin
 
 go 1.12
 
