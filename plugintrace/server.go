@@ -39,6 +39,9 @@ type ServerTracer struct {
 	// versions in common with the client using the negotiation protocol.
 	// The argument is the set of version numbers the client supports.
 	VersionNegotationFailed func(clientVersions []int)
+
+	// GRPCServeError is called if the GRPC server exits with an error.
+	GRPCServeError func(error)
 }
 
 type serverCtxKeyType int

@@ -3,10 +3,14 @@ package rpcplugin
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
+	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/apparentlymart/go-ctxenv/ctxenv"
 	"go.rpcplugin.org/rpcplugin/plugintrace"
@@ -14,8 +18,9 @@ import (
 )
 
 // Serve starts up a plugin server and blocks while serving requests. It
-// returns only if initialization failed or if the given context becomes
-// "done".
+// returns an error if initialization failed or if the given context becomes
+// "done". It returns nil once all in-flight requests are complete if the
+// client asks the server to exit.
 //
 // Usually an application with rpcplugin-based plugins will have its own
 // SDK library that provides a higher-level Serve function which takes some
@@ -43,16 +48,108 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 	}
 
 	tracer := plugintrace.ContextServerTracer(ctx)
-	protoVersion, server := negotiateProtoVersion(ctx, config.ProtoVersions)
+	protoVersion, server := negotiateServerProtoVersion(ctx, config.ProtoVersions)
 	if server == nil {
 		return fmt.Errorf("plugin does not support any protocol versions supported by the host")
 	}
 
-	// TODO: Fill in the other two arguments once the rest of this function
-	// is implemented.
-	tracer.Listening(nil, nil, protoVersion)
+	listener, err := serverListen(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot start plugin RPC server: %s", err)
+	}
+	defer listener.Close()
 
-	return nil
+	var autoCertStr string // only populated if we use automatic certificate negotiation
+	tlsConfig, autoCert, err := serverTLSConfig(ctx, config.TLSConfig)
+	if len(autoCert.Certificate) != 0 {
+		autoCertStr = base64.RawStdEncoding.EncodeToString(autoCert.Certificate[0])
+	}
+
+	// While the plugin code is running we redirect os.Stdout and os.Stderr to
+	// some pipes whose data we'll send via the RPC protocol, so that the "real"
+	// stdout and stderr can be reserved for the plugin handshake data.
+	handshakeOut := os.Stdout
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %s", err)
+	}
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe: %s", err)
+	}
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	os.Stdout = stdoutW
+	os.Stderr = stderrW
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	chiCtx, cancel := context.WithCancel(ctx)
+	srvGRC := &serverGRPC{
+		Server: server,
+		TLS:    tlsConfig,
+		Stdout: stdoutR,
+		Stderr: stderrR,
+		Done:   cancel,
+		Tracer: tracer,
+	}
+	err = srvGRC.Init()
+	if err != nil {
+		return fmt.Errorf("plugin server init failed: %s", err)
+	}
+
+	// By default we eat SIGINT because otherwise we'll tend to get these
+	// when the user tries to interrupt the host program, but we want to let
+	// the host program be in control of when and how we shut down.
+	if !config.NoSignalHandlers {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt)
+		go func() {
+			var count int32
+			ign := tracer.InterruptIgnored
+			for {
+				select {
+				case <-ch:
+					newCount := atomic.AddInt32(&count, 1)
+					if ign != nil {
+						ign(int(newCount))
+					}
+				case <-chiCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	// We must now write the rpcplugin handshake line to real stdout so that the
+	// client (our parent process) knows where to connect.
+	_, err = fmt.Fprintf(handshakeOut, "1|%d|%s|%s|grpc|%s\n",
+		protoVersion,
+		listener.Addr().Network(),
+		listener.Addr().String(),
+		autoCertStr,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to print plugin handshake to stdout: %s", err)
+	}
+	// We intentionally ignore the error from sync because stdout might be
+	// bound to something that cannot sync.
+	handshakeOut.Sync()
+
+	go srvGRC.Serve(listener)
+
+	if tracer.Listening != nil {
+		tracer.Listening(listener.Addr(), tlsConfig, protoVersion)
+	}
+	<-chiCtx.Done() // wait for the GRPC handler to signal that it is ready to exit
+	if chiCtx.Err() == context.Canceled {
+		// For this particular context, being cancelled is not considered an error.
+		return nil
+	}
+	return chiCtx.Err()
 }
 
 // ServerConfig is used to configure the behavior of a plugin server started
@@ -97,7 +194,7 @@ func (fn ServerFunc) RegisterServer(srv *grpc.Server) error {
 	return fn(srv)
 }
 
-func negotiateProtoVersion(ctx context.Context, protoVersions map[int]Server) (version int, server Server) {
+func negotiateServerProtoVersion(ctx context.Context, protoVersions map[int]Server) (version int, server Server) {
 	clientVersionsStr := ctxenv.Getenv(ctx, "PLUGIN_PROTOCOL_VERSIONS")
 	if clientVersionsStr == "" {
 		// Client isn't performing the negotiation protocol propertly, so
