@@ -21,7 +21,7 @@ import (
 const grpcServiceName = "plugin"
 
 type serverGRPC struct {
-	Server Server
+	Server ServerVersion
 	TLS    *tls.Config
 
 	// These are the reads end of some pipes whose data we'll shuttle over

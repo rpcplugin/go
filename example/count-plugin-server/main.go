@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	logger := log.New(os.Stderr, "server", log.Flags())
+	logger := log.New(os.Stderr, "server: ", log.Flags())
 	ctx := plugintrace.WithServerTracer(context.Background(), plugintrace.ServerLogTracer(logger))
 
 	err := rpcplugin.Serve(ctx, &rpcplugin.ServerConfig{
@@ -23,8 +23,10 @@ func main() {
 			CookieKey:   "COUNT_PLUGIN_COOKIE",
 			CookieValue: "e8f9c7d7-20fd-55c7-83f9-bee91db2922b",
 		},
-		ProtoVersions: map[int]rpcplugin.Server{
-			5: protocolVersion1{},
+		ProtoVersions: map[int]rpcplugin.ServerVersion{
+			1: protocolVersion1{
+				logger: logger,
+			},
 		},
 	})
 

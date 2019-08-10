@@ -64,6 +64,9 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 	if len(autoCert.Certificate) != 0 {
 		autoCertStr = base64.RawStdEncoding.EncodeToString(autoCert.Certificate[0])
 	}
+	if tracer.TLSConfig != nil {
+		tracer.TLSConfig(tlsConfig, autoCertStr != "")
+	}
 
 	// While the plugin code is running we redirect os.Stdout and os.Stderr to
 	// some pipes whose data we'll send via the RPC protocol, so that the "real"
@@ -163,7 +166,7 @@ type ServerConfig struct {
 	// version. The server will select the greatest version number that the
 	// client and the server have in common, and then call that version's
 	// Server implementation to activate it.
-	ProtoVersions map[int]Server
+	ProtoVersions map[int]ServerVersion
 
 	// TLSConfig can be assigned a custom function for preparing the TLS
 	// configuration used to authenticate and encrypt the RPC channel. If
@@ -179,22 +182,23 @@ type ServerConfig struct {
 	NoSignalHandlers bool
 }
 
-// Server is the interface to implement to write a plugin server, which is the
-// plugin that is launched by the client and recieves requests from it.
-type Server interface {
+// ServerVersion is the interface to implement to write a server for a particular
+// plugin version.
+type ServerVersion interface {
 	RegisterServer(*grpc.Server) error
 }
 
-// ServerFunc is a function type that implements interface Server
-type ServerFunc func(*grpc.Server) error
+// ServerVersionFunc is a function type that implements interface ServerVersion
+type ServerVersionFunc func(*grpc.Server) error
 
-var _ Server = ServerFunc(nil)
+var _ ServerVersion = ServerVersionFunc(nil)
 
-func (fn ServerFunc) RegisterServer(srv *grpc.Server) error {
+// RegisterServer implements ServerVersion.
+func (fn ServerVersionFunc) RegisterServer(srv *grpc.Server) error {
 	return fn(srv)
 }
 
-func negotiateServerProtoVersion(ctx context.Context, protoVersions map[int]Server) (version int, server Server) {
+func negotiateServerProtoVersion(ctx context.Context, protoVersions map[int]ServerVersion) (version int, server ServerVersion) {
 	clientVersionsStr := ctxenv.Getenv(ctx, "PLUGIN_PROTOCOL_VERSIONS")
 	if clientVersionsStr == "" {
 		// Client isn't performing the negotiation protocol propertly, so
