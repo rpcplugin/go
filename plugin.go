@@ -72,9 +72,15 @@ func New(ctx context.Context, config *ClientConfig) (plugin *Plugin, err error) 
 
 	environ := []string{
 		fmt.Sprintf("%s=%s", config.Handshake.CookieKey, config.Handshake.CookieValue),
-		fmt.Sprintf("PLUGIN_MIN_PORT=%d", config.MinPort),
-		fmt.Sprintf("PLUGIN_MAX_PORT=%d", config.MaxPort),
 		fmt.Sprintf("PLUGIN_PROTOCOL_VERSIONS=%s", strings.Join(versionStrings, ",")),
+
+		// Client-selected port range is a hashicorp/go-plugin thing that
+		// rpcplugin doesn't actually support, but we'll set these variables
+		// anyway so that Go rpcplugin clients can interop with
+		// hashicorp/go-plugin servers. This is not part of the rpcplugin
+		// protocol, so other client implementations may not set these.
+		"PLUGIN_MIN_PORT=10000",
+		"PLUGIN_MAX_PORT=25000",
 	}
 
 	tlsConfig := config.TLSConfig

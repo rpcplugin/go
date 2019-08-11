@@ -64,13 +64,6 @@ type ClientConfig struct {
 	// If this is given as zero, it will default to one minute.
 	StartTimeout time.Duration
 
-	// MinPort and MaxPort constrain the range of port numbers that servers
-	// may use when running on a TCP listener. Both are inclusive.
-	//
-	// If MinPort is zero, it defaults to 10000.
-	// If MaxPort is zero, it defaults to 25000.
-	MinPort, MaxPort uint16
-
 	// Stderr, if non-nil, will recieve any data written by the child process
 	// to its stderr stream.
 	//
@@ -84,13 +77,6 @@ type ClientConfig struct {
 func (c *ClientConfig) setDefaults() {
 	if c.StartTimeout == 0 {
 		c.StartTimeout = 1 * time.Minute
-	}
-
-	if c.MinPort == 0 {
-		c.MinPort = 10000
-	}
-	if c.MaxPort == 0 {
-		c.MaxPort = 25000
 	}
 
 	if c.Stderr == nil {
