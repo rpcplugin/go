@@ -18,6 +18,16 @@ func main() {
 	logger := log.New(os.Stderr, "client: ", log.Flags())
 	ctx := plugintrace.WithClientTracer(context.Background(), plugintrace.ClientLogTracer(logger))
 
+	// Can optionally override the server command line on the client's command
+	// line, which can be useful to see different language examples
+	// interoperating.
+	var cmdArgs []string
+	if givenArgs := os.Args; len(givenArgs) > 1 {
+		cmdArgs = givenArgs[1:]
+	} else {
+		cmdArgs = []string{"count-plugin-server"}
+	}
+
 	// We'll start by launching the plugin server. This expects to find
 	// the executable "count-plugin-server" in your PATH, which you can
 	// achieve by "go install"ing the server package and making sure your
@@ -36,7 +46,7 @@ func main() {
 			1: protocolVersion1{},
 		},
 
-		Cmd:    exec.Command("count-plugin-server"),
+		Cmd:    exec.Command(cmdArgs[0], cmdArgs[1:]...),
 		Stderr: os.Stderr, // The two processes can just share our stderr here
 	})
 	if err != nil {
