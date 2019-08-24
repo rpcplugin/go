@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -72,4 +73,20 @@ func generateCertificate(ctx context.Context, host string) (tls.Certificate, err
 	}
 
 	return cert, nil
+}
+
+func decodeRawBase64Cert(src string) (*x509.Certificate, error) {
+	asn1, err := base64.StdEncoding.DecodeString(src)
+	if err != nil {
+		// We'll also try RawStdEncoding, because that's what HashiCorp's
+		// go-plugin uses and so this is more compatible. Support for
+		// RawStdEncoding is not a required part of rpcplugin, so not all
+		// implementations will support it.
+		asn1, err = base64.RawStdEncoding.DecodeString(src)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse plugin server's temporary certificate: %s", err)
+		}
+	}
+
+	return x509.ParseCertificate([]byte(asn1))
 }

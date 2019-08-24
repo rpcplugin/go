@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/apparentlymart/go-ctxenv/ctxenv"
 	"go.rpcplugin.org/rpcplugin/plugintrace"
@@ -56,22 +57,32 @@ func serverTLSConfig(ctx context.Context, addr net.Addr, fn func() (*tls.Config,
 }
 
 func serverListen(ctx context.Context) (net.Listener, error) {
-	// We prefer to use a UNIX domain socket if available because then we
-	// can use filesystem permissions to further constraint access, but
-	// not all operating systems support them so we'll fall back on a TCP
-	// socket on loopback otherwise. Mutual TLS auth is the primary means
-	// to keep other callers out of our server, so it doesn't really matter
-	// if other processes on the same system can connect.
-	l, err := serverListenUnix(ctx)
-	if err == nil {
-		return l, nil
+	transports := ctxenv.Getenv(ctx, "PLUGIN_TRANSPORTS")
+	if transports == "" {
+		transports = "unix,tcp"
 	}
 
-	return serverListenTCP(ctx)
+	for _, transport := range strings.Split(transports, ",") {
+		switch transport {
+		case "unix":
+			l, err := serverListenUnix(ctx)
+			if err == nil {
+				return l, nil
+			}
+		case "tcp":
+			l, err := serverListenTCP(ctx)
+			if err == nil {
+				return l, nil
+			}
+		}
+	}
+
+	// If we fall out here then we have no suitable transports in common
+	// with the client, so we fail.
+	return nil, fmt.Errorf("unable to negotiate a transport protocol")
 }
 
 func serverListenUnix(ctx context.Context) (net.Listener, error) {
-	//return nil, fmt.Errorf("disabled")
 	baseDir := ""
 	if runtimeDir := ctxenv.Getenv(ctx, "XDG_RUNTIME_DIR"); runtimeDir != "" && filepath.IsAbs(runtimeDir) {
 		// If XDG_RUNTIME_DIR is available then we'll prefer it, because its

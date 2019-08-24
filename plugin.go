@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -73,6 +72,7 @@ func New(ctx context.Context, config *ClientConfig) (plugin *Plugin, err error) 
 	environ := []string{
 		fmt.Sprintf("%s=%s", config.Handshake.CookieKey, config.Handshake.CookieValue),
 		fmt.Sprintf("PLUGIN_PROTOCOL_VERSIONS=%s", strings.Join(versionStrings, ",")),
+		"PLUGIN_TRANSPORTS=unix,tcp",
 
 		// Client-selected port range is a hashicorp/go-plugin thing that
 		// rpcplugin doesn't actually support, but we'll set these variables
@@ -232,14 +232,8 @@ func New(ctx context.Context, config *ClientConfig) (plugin *Plugin, err error) 
 		// though rpcplugin's server does not ever produce such things.
 		if len(parts) >= 6 && len(parts[5]) > 50 {
 			certStr := parts[5]
-
 			certPool := x509.NewCertPool()
-			asn1, err := base64.RawStdEncoding.DecodeString(certStr)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse plugin server's temporary certificate: %s", err)
-			}
-
-			x509Cert, err := x509.ParseCertificate([]byte(asn1))
+			x509Cert, err := decodeRawBase64Cert(certStr)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse plugin server's temporary certificate: %s", err)
 			}
