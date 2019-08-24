@@ -14,7 +14,7 @@ import (
 	"go.rpcplugin.org/rpcplugin/plugintrace"
 )
 
-func serverTLSConfig(ctx context.Context, fn func() (*tls.Config, error)) (*tls.Config, tls.Certificate, error) {
+func serverTLSConfig(ctx context.Context, addr net.Addr, fn func() (*tls.Config, error)) (*tls.Config, tls.Certificate, error) {
 	tracer := plugintrace.ContextServerTracer(ctx)
 	if fn != nil {
 		// If we're given a configuration function, it overrides all of our
@@ -42,7 +42,7 @@ func serverTLSConfig(ctx context.Context, fn func() (*tls.Config, error)) (*tls.
 		return nil, tls.Certificate{}, fmt.Errorf("PLUGIN_CLIENT_CERT has invalid PEM certificate chain")
 	}
 
-	serverCert, err := generateCertificate(ctx)
+	serverCert, err := generateCertificate(ctx, "localhost")
 	if err != nil {
 		return nil, tls.Certificate{}, fmt.Errorf("cannot create temporary server certificate: %s", err)
 	}
@@ -71,6 +71,7 @@ func serverListen(ctx context.Context) (net.Listener, error) {
 }
 
 func serverListenUnix(ctx context.Context) (net.Listener, error) {
+	//return nil, fmt.Errorf("disabled")
 	baseDir := ""
 	if runtimeDir := ctxenv.Getenv(ctx, "XDG_RUNTIME_DIR"); runtimeDir != "" && filepath.IsAbs(runtimeDir) {
 		// If XDG_RUNTIME_DIR is available then we'll prefer it, because its

@@ -3,9 +3,8 @@ package rpcplugin
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -17,8 +16,8 @@ import (
 
 // generateCertificate generates a temporary certificate for plugin
 // authentication.
-func generateCertificate(ctx context.Context) (tls.Certificate, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+func generateCertificate(ctx context.Context, host string) (tls.Certificate, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
@@ -28,8 +27,6 @@ func generateCertificate(ctx context.Context) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-
-	host := "localhost"
 
 	template := &x509.Certificate{
 		Subject: pkix.Name{
@@ -59,10 +56,7 @@ func generateCertificate(ctx context.Context) (tls.Certificate, error) {
 		return tls.Certificate{}, err
 	}
 
-	keyBytes, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
+	keyBytes := x509.MarshalPKCS1PrivateKey(key)
 
 	var keyOut bytes.Buffer
 	if err := pem.Encode(&keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {

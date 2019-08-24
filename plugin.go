@@ -87,7 +87,7 @@ func New(ctx context.Context, config *ClientConfig) (plugin *Plugin, err error) 
 	autoTLS := false
 	if tlsConfig == nil {
 		// A nil TLSConfig means to use the auto-negotiation protocol.
-		cert, err := generateCertificate(ctx)
+		cert, err := generateCertificate(ctx, "localhost")
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate client TLS certificate: %s", err)
 		}

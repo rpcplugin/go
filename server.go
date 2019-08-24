@@ -60,9 +60,9 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 	defer listener.Close()
 
 	var autoCertStr string // only populated if we use automatic certificate negotiation
-	tlsConfig, autoCert, err := serverTLSConfig(ctx, config.TLSConfig)
+	tlsConfig, autoCert, err := serverTLSConfig(ctx, listener.Addr(), config.TLSConfig)
 	if len(autoCert.Certificate) != 0 {
-		autoCertStr = base64.RawStdEncoding.EncodeToString(autoCert.Certificate[0])
+		autoCertStr = base64.StdEncoding.EncodeToString(autoCert.Certificate[0])
 	}
 	if tracer.TLSConfig != nil {
 		tracer.TLSConfig(tlsConfig, autoCertStr != "")
