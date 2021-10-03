@@ -38,9 +38,13 @@ type serverGRPC struct {
 }
 
 func (s *serverGRPC) Init() error {
-	s.grpcServer = grpc.NewServer(
-		grpc.Creds(credentials.NewTLS(s.TLS)),
-	)
+	var opts []grpc.ServerOption
+	if s.TLS != nil {
+		opts = []grpc.ServerOption{
+			grpc.Creds(credentials.NewTLS(s.TLS)),
+		}
+	}
+	s.grpcServer = grpc.NewServer(opts...)
 
 	// Register the health service
 	// This is mandatory because clients use it to detect unresponsive servers.

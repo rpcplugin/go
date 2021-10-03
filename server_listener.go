@@ -22,6 +22,13 @@ func serverTLSConfig(ctx context.Context, addr net.Addr, fn func() (*tls.Config,
 		// usual default behavior so that the calling application can handle
 		// TLS certificate selection/issuance however it wants.
 		tlsConfig, err := fn()
+		if err == errForceNoTLS {
+			// We don't typically allow disabling TLS entirely, because that
+			// violates the rpcplugin spec. However, the special config
+			// function ForceServerWithoutTLS _can_ really turn TLS off,
+			// as a pragmatic exception.
+			return nil, tls.Certificate{}, nil
+		}
 		if err == nil && tlsConfig == nil {
 			// Having no TLS config at all is not permitted.
 			return nil, tls.Certificate{}, fmt.Errorf("TLS configuration function returned no TLS configuration")

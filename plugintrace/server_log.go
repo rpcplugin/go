@@ -17,6 +17,10 @@ import (
 func ServerLogTracer(logger *log.Logger) *ServerTracer {
 	return &ServerTracer{
 		TLSConfig: func(config *tls.Config, auto bool) {
+			if config == nil {
+				logger.Println("TLS is entirely disabled")
+				return
+			}
 			if auto {
 				logger.Println("auto-negotiated TLS configuration")
 			} else {

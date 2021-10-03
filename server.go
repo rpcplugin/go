@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -61,6 +62,9 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 
 	var autoCertStr string // only populated if we use automatic certificate negotiation
 	tlsConfig, autoCert, err := serverTLSConfig(ctx, listener.Addr(), config.TLSConfig)
+	if err != nil {
+		return fmt.Errorf("invalid TLS settings: %w", err)
+	}
 	if len(autoCert.Certificate) != 0 {
 		autoCertStr = base64.StdEncoding.EncodeToString(autoCert.Certificate[0])
 	}
@@ -181,6 +185,21 @@ type ServerConfig struct {
 	// being recieved by the plugin server processes.
 	NoSignalHandlers bool
 }
+
+// ForceServerWithoutTLS is a predefined function for use with ServerConfig.TLSConfig
+// which makes a server not use TLS at all. This makes the server non-compliant
+// with the rpcplugin specification, but can be useful for debugging or for
+// implementing servers for HashiCorp's go-plugin library when the client is
+// not configured to use TLS. (That go-plugin mode isn't included in the
+// rpcplugin specification.)
+var ForceServerWithoutTLS = func() (*tls.Config, error) {
+	return nil, errForceNoTLS
+}
+
+// errForceNoTLS is a special error type used by ServerWithoutTLS, so that
+// ServerWithoutTLS will be the only possible way to turn of TLS mode and thus
+// make the server non-rpcplugin-compliant,
+var errForceNoTLS = errors.New("force no TLS")
 
 // ServerVersion is the interface to implement to write a server for a particular
 // plugin version.
