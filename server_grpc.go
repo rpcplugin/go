@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 
+	"go.rpcplugin.org/rpcplugin/internal/gopluginshim"
 	"go.rpcplugin.org/rpcplugin/plugintrace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -37,7 +38,7 @@ type serverGRPC struct {
 	grpcServer *grpc.Server
 }
 
-func (s *serverGRPC) Init() error {
+func (s *serverGRPC) Init(goPluginClose func()) error {
 	var opts []grpc.ServerOption
 	if s.TLS != nil {
 		opts = []grpc.ServerOption{
@@ -51,6 +52,16 @@ func (s *serverGRPC) Init() error {
 	healthCheck := health.NewServer()
 	healthCheck.SetServingStatus(grpcServiceName, grpc_health_v1.HealthCheckResponse_SERVING)
 	grpc_health_v1.RegisterHealthServer(s.grpcServer, healthCheck)
+
+	// If we think we're running as a client of go-plugin rather than a
+	// true rpcplugin implementation then we'll implement go-plugin's
+	// extra "shutdown" service, since otherwise go-plugin will hang for
+	// 2 seconds when it tries to shut this server down.
+	// (rpcplugin clients just use a signal for this, rather than a special
+	// gRPC service)
+	if goPluginClose != nil {
+		gopluginshim.RegisterGoPluginShutdown(s.grpcServer, goPluginClose)
+	}
 
 	// Let the caller's own service register itself
 	err := s.Server.RegisterServer(s.grpcServer)

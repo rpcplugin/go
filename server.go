@@ -66,7 +66,15 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 		return fmt.Errorf("invalid TLS settings: %w", err)
 	}
 	if len(autoCert.Certificate) != 0 {
-		autoCertStr = base64.StdEncoding.EncodeToString(autoCert.Certificate[0])
+		if clientSmellsLikeGoPlugin(ctx) {
+			// As a concession to go-plugin compatibility we use its non-standard
+			// unpadded base64 encoding when the client seems like it's go-plugin,
+			// or else the certificate won't be parsed correctly when its length
+			// isn't a round 3 bytes.
+			autoCertStr = base64.RawStdEncoding.EncodeToString(autoCert.Certificate[0])
+		} else {
+			autoCertStr = base64.StdEncoding.EncodeToString(autoCert.Certificate[0])
+		}
 	}
 	if tracer.TLSConfig != nil {
 		tracer.TLSConfig(tlsConfig, autoCertStr != "")
@@ -103,7 +111,11 @@ func Serve(ctx context.Context, config *ServerConfig) error {
 		Done:   cancel,
 		Tracer: tracer,
 	}
-	err = srvGRC.Init()
+	var goPluginClose func()
+	if clientSmellsLikeGoPlugin(ctx) {
+		goPluginClose = cancel
+	}
+	err = srvGRC.Init(goPluginClose)
 	if err != nil {
 		return fmt.Errorf("plugin server init failed: %s", err)
 	}
@@ -259,4 +271,18 @@ func negotiateServerProtoVersion(ctx context.Context, protoVersions map[int]Serv
 		trace.VersionNegotationFailed(clientVersions)
 	}
 	return 0, nil
+}
+
+// clientSmellsLikeGoPlugin returns true if the client hasn't set some of
+// the environment variables that are required for rpcplugin but are not
+// used by the (undocumented) HashiCorp go-plugin protocol.
+//
+// When this returns true, the server implementation will make some
+// small not-rpcplugin-complient adaptations to make its behavior more
+// compatible with go-plugin.
+func clientSmellsLikeGoPlugin(ctx context.Context) bool {
+	// go-plugin doesn't use the PLUGIN_TRANSPORTS environment variable and
+	// instead expects servers to just "know" that the client expects
+	// "unix,tcp" on Unix platforms and just "tcp" on Windows.
+	return ctxenv.Getenv(ctx, "PLUGIN_TRANSPORTS") == ""
 }

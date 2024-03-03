@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package plugin;
+option go_package = "go.rpcplugin.org/rpcplugin/internal/gopluginshim";
+
+message Empty {
+}
+
+service GRPCController {
+    rpc Shutdown(Empty) returns (Empty);
+}
