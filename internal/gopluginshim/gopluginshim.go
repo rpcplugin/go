@@ -7,13 +7,13 @@ import (
 )
 
 // RegisterGoPluginShutdown provides a minimal implementation of the extra
-// gRPC service that go-plugin client expect to find on any go-plugin server
+// gRPC service that go-plugin clients expect to find on any go-plugin server
 // to command it to shut down.
 //
 // Without this, go-plugin clients will hang for two seconds every time they
 // try to shut down a plugin.
 func RegisterGoPluginShutdown(server *grpc.Server, close func()) {
-	RegisterGRPCControllerServer(server, &controllerServer{})
+	RegisterGRPCControllerServer(server, &controllerServer{close})
 }
 
 type controllerServer struct {

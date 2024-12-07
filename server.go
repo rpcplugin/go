@@ -278,7 +278,7 @@ func negotiateServerProtoVersion(ctx context.Context, protoVersions map[int]Serv
 // used by the (undocumented) HashiCorp go-plugin protocol.
 //
 // When this returns true, the server implementation will make some
-// small not-rpcplugin-complient adaptations to make its behavior more
+// small not-rpcplugin-compliant adaptations to make its behavior more
 // compatible with go-plugin.
 func clientSmellsLikeGoPlugin(ctx context.Context) bool {
 	// go-plugin doesn't use the PLUGIN_TRANSPORTS environment variable and
